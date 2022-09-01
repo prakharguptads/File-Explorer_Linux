@@ -28,6 +28,7 @@ int cursor = 0;
 string attribute2="",command="",attribute1="";
 int max_i=10,firstindex=0,lastindex=firstindex+max_i;
 static struct termios ins, ns;
+string searchingdir;
 
 void moveCursor(int x, int y) {
         cout << "\033[" << x << ";" << y << "H";
@@ -41,7 +42,12 @@ void resolvestatement(string statement)
         int f=0;
         for(int i=0;i<statement.length();i++)
         {
-                if(statement[i]!=' ')
+                if(statement[i]==92)
+                {
+                        s+=' ';
+                        i++;
+                }
+                else if(statement[i]!=' ')
                 s+=statement[i];
                 else{
                         if(f==0)
@@ -114,7 +120,7 @@ void showCurrentDir(const char* dirname)
 	}
         moveCursor(12,0);
         cout << "\nMode: Normal Mode. Press : to switch to Command Mode\t"<<currentDir;
-        moveCursor(0,0);
+        moveCursor(1,0);
 	closedir(dir);
 }
 
@@ -279,21 +285,97 @@ void backspace()
 //                 return input1;
 // }
 
-// bool searchfile()
-// {
-//         for(int i=0;i<files.size();i++)
-//         {
-//                 if(files[i]->d_name!="." || files[i]->d_name!="..")
-//                 searchfile(files[i])
-//         }
-//         return 0;
-// }
+bool searchfile(string filename)
+{
+        DIR * d;
+        struct dirent* file;
+        struct stat buf;
+        d=opendir(searchingdir.c_str());
+        while((file=readdir(d))!=NULL)
+        {
+                stat((searchingdir+"/"+file->d_name).c_str(),&buf);
+                if(S_ISREG(buf.st_mode))
+                {
+                        if(string(file->d_name)==filename)
+                        return 1;
+                }
+                else{
+                        if(string(file->d_name)!= "." && string(file->d_name)!=".." && string(file->d_name).substr(0,1)!=".")
+                        {
+                                string temp=searchingdir;
+                                searchingdir=searchingdir+"/"+file->d_name;
+                                if(searchfile(filename))
+                                return 1;
+                                searchingdir=temp;
+                        }
+                }
+        }
+        closedir(d);
+        return 0;
+}
 
 void setMode()
 {
         moveCursor(13, 0);
         cout << "Mode: Command Mode. Press ESC to switch to Normal Mode\n";
         return;
+}
+
+void copyFile(string filename, string destination) {
+        char block[4096];
+        int in , out, nread,n;
+        in = open(filename.c_str(), O_RDONLY);
+        out = open((destination).c_str(), O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR | S_IXUSR);
+        while (1) {
+        nread = read(in, block, 4096);
+        if (nread == -1) {
+            printf("Error reading file.\n");
+            exit(1);
+        }
+        n = nread;
+        if (n == 0) break;
+        nread = write(out, block, n);
+        if (nread == -1) {
+            printf("Error writing to file.\n");
+            exit(1);
+        }
+    }
+        close(in);
+        close(out);
+}
+
+void copydir(string s1,string s2)
+{
+        DIR * d;
+        struct dirent* file;
+        struct stat buf;
+        d=opendir(s1.c_str());
+        while((file=readdir(d))!=NULL)
+        {
+                stat((s1+"/"+file->d_name).c_str(),&buf);
+                if(S_ISREG(buf.st_mode))
+                {
+                        copyFile(s1+"/"+string(file->d_name), s2+"/"+string(file->d_name));
+                }
+                else{
+                        if(string(file->d_name)!="." && string(file->d_name)!=".."){
+                                mkdir((s1 + "/" + string(file->d_name)).c_str(), S_IRUSR | S_IWUSR | S_IXUSR);
+                                copydir(s1+ "/" + string(file->d_name), s2 + "/" + string(file->d_name));
+                        }
+                }
+        }
+        closedir(d);
+        return;
+}
+
+char* ExtractPath(string attribute2)
+{
+        char* p;
+        if(attribute2[0]=='~')
+        p = realpath((attribute2.substr(1)).c_str(),NULL);
+        else
+        p = realpath(attribute2.c_str(),NULL);
+        return p;
 }
 
 int commandMode()
@@ -327,7 +409,11 @@ int commandMode()
                         //cout<<endl;
                         if(command=="search")
                         {
-                                
+                                searchingdir=currentDir;
+                                if(searchfile(attribute1))
+                                cout<<endl<<"True";
+                                else
+                                cout<<endl<<"False";
                         }
                         else if(command=="create_dir")
                         {
@@ -345,11 +431,7 @@ int commandMode()
                         }
                         else if(command=="goto")
                         {
-                                char* p;
-                                if(attribute1[0]=='~')
-                                p = realpath((attribute1.substr(1)).c_str(),NULL);
-                                else
-                                p = realpath(attribute1.c_str(),NULL);
+                                char* p=ExtractPath(attribute1);
                                 SetCurrentDir(p);
                                 setMode();
                         }
@@ -361,8 +443,17 @@ int commandMode()
                                 SetCurrentDir(currentDir);
                                 setMode();
                         }
-                        else if(command=="copy")
-                        printf("copy");
+                        else if(command=="copy_dir")
+                        {
+                                char* p=ExtractPath(attribute2);
+                                mkdir((string(p) + "/" + attribute1).c_str(), S_IRUSR | S_IWUSR | S_IXUSR);
+                                copydir(string(currentDir)+ "/" + attribute1, string(p) + "/" + attribute1);
+                        }
+                        else if(command=="copy_file")
+                        {
+                                char* p=ExtractPath(attribute2);
+                                copyFile(string(currentDir)+ "/" + attribute1, string(p) + "/" + attribute1);
+                        }
                         else if(command=="move")
                         printf("move");
                         else if(command=="quit")
