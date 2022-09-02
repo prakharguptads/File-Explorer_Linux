@@ -267,24 +267,6 @@ void backspace()
         return ;
 }
 
-// string read()
-// {
-//         char ch='$';
-//         string input1="";
-//                 //printf("$ ");
-//                 while((ch = cin.get()) != ' ' && ch!=10){
-//                         if(ch==127 and input1.length()>=1){
-//                         input1.pop_back();
-//                         printf("\b \b");
-//                         }
-//                         else if(ch==127){}
-//                         else if(ch!=10)
-//                         input1+=ch;
-//                         cout<<ch;
-//                 }
-//                 return input1;
-// }
-
 bool searchfile(string filename)
 {
         DIR * d;
@@ -302,6 +284,8 @@ bool searchfile(string filename)
                 else{
                         if(string(file->d_name)!= "." && string(file->d_name)!=".." && string(file->d_name).substr(0,1)!=".")
                         {
+                                if(string(file->d_name)==filename)
+                                return 1;
                                 string temp=searchingdir;
                                 searchingdir=searchingdir+"/"+file->d_name;
                                 if(searchfile(filename))
@@ -378,6 +362,17 @@ char* ExtractPath(string attribute2)
         return p;
 }
 
+void deletefile()
+{
+        remove(attribute1);
+        return;
+}
+
+void deletedir()
+{
+        
+}
+
 int commandMode()
 {
         //tcsetattr(0, TCSANOW, & ins);
@@ -435,8 +430,14 @@ int commandMode()
                                 SetCurrentDir(p);
                                 setMode();
                         }
-                        else if(command=="delete")
-                        printf("delete");
+                        else if(command=="delete_file")
+                        {
+                                deletefile();
+                        }
+                        else if(command=="delete_dir")
+                        {
+                                deletedir();
+                        }
                         else if(command=="rename")
                         {
                                 rename(attribute1.c_str(), attribute2.c_str());
@@ -455,7 +456,19 @@ int commandMode()
                                 copyFile(string(currentDir)+ "/" + attribute1, string(p) + "/" + attribute1);
                         }
                         else if(command=="move")
-                        printf("move");
+                        {
+                                string filename="";
+                                for(int i=attribute1.size()-1;i>=0;i--)
+                                {
+                                        if(attribute1[i]!='/')
+                                        filename=attribute1[i]+filename;
+                                        else
+                                        break;
+                                }
+                                rename(attribute1.c_str(), (attribute2+"/"+filename).c_str());
+                                SetCurrentDir(currentDir);
+                                setMode();
+                        }
                         else if(command=="quit")
                         return 1;
                         cout<<endl;
