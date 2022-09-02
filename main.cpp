@@ -362,15 +362,36 @@ char* ExtractPath(string attribute2)
         return p;
 }
 
-void deletefile()
+void deletefile(string attribute1)
 {
-        remove(attribute1);
+        remove(attribute1.c_str());
         return;
 }
 
-void deletedir()
+void deletedir(string deletingfile)
 {
-        
+        DIR * d;
+        struct dirent* file;
+        struct stat buf;
+        d=opendir(deletingfile.c_str());
+        while((file=readdir(d))!=NULL)
+        {
+                stat((deletingfile+"/"+string(file->d_name)).c_str(),&buf);
+                if(S_ISREG(buf.st_mode))
+                {
+                        deletefile(deletingfile+"/"+string(file->d_name));
+                }
+                else{
+                        if(string(file->d_name)!="." && string(file->d_name)!=".."){
+                                deletedir(deletingfile+"/"+string(file->d_name));
+                                rmdir(file->d_name);
+                        }
+                }
+        }
+        closedir(d);
+        if(deletingfile!="/home/dell")
+        rmdir(deletingfile.c_str());
+        return;
 }
 
 int commandMode()
@@ -432,11 +453,13 @@ int commandMode()
                         }
                         else if(command=="delete_file")
                         {
-                                deletefile();
+                                deletefile(attribute1);
                         }
                         else if(command=="delete_dir")
                         {
-                                deletedir();
+                                deletedir(attribute1);
+                                SetCurrentDir(currentDir);
+                                setMode();
                         }
                         else if(command=="rename")
                         {
