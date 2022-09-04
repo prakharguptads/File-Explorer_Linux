@@ -24,12 +24,13 @@ size_t dirSize = 1024;
 char currentDir[1024];
 vector <dirent*> files;
 stack <string> backs,forwards;
-int cursor = 0;
+int cursor = 1;
 vector <string> attributes;
 string attribute2="",command="",attribute1="";
-int max_i=10,firstindex=0,lastindex=firstindex+max_i;
+int max_i=10,firstindex=0,lastindex=firstindex+max_i,nrows,ncols;
 static struct termios ins, ns;
 string searchingdir;
+struct winsize w;
 
 void moveCursor(int x, int y) {
         cout << "\033[" << x << ";" << y << "H";
@@ -51,23 +52,25 @@ void resolvestatement(string statement)
                 else if(statement[i]!=' ')
                 s+=statement[i];
                 else{
-                        if(f==0)
+                        if(f==0 && s!="")
                         {
                                 command=s;
                                 attributes.push_back(s);
+                                f++;
                         }
-                        else if(f==1)
+                        else if(f==1 && s!="")
                         {
                                 attribute1=s;
                                 attributes.push_back(s);
+                                f++;
                         }
-                        else
+                        else if(s!="")
                         {
                                 attribute2=s;
                                 attributes.push_back(s);
                         }
                         s="";
-                        f++;
+                        
                 }
         }
 }
@@ -92,6 +95,7 @@ void showCurrentDir(const char* dirname)
         {
         mode_t val;
         val=(fs.st_mode & ~S_IFMT);
+        cout<<i+1<<"\t";
         printf((S_ISDIR(fs.st_mode)) ? "d" : "-");
         (val & S_IRUSR) ? printf("r") : printf("-");
         (val & S_IWUSR) ? printf("w") : printf("-");    
@@ -123,27 +127,32 @@ void showCurrentDir(const char* dirname)
             pr="GB";
             else if(l==4)
             pr="TB";
-            cout<<"\t"<<fs.st_gid<<"\t"<<fs.st_uid<<"\t"<<timbuf<<"\t"<< st_s<<pr<<"\t";
+            if(ncols>95)
+            cout<<"\t"<<fs.st_gid<<"\t"<<fs.st_uid<<"\t"<<timbuf<<"\t"<< st_s<<pr;
         }
-		cout<<entity->d_name<<endl;
+                if(string(entity->d_name).length()>20)
+                cout<<"\t"<<string(entity->d_name).substr(0,17)<<"..."<<endl;
+                else
+		cout<<"\t"<<entity->d_name<<endl;
 		entity=readdir(dir);
 	}
-        moveCursor(12,0);
-        cout << "\nMode: Normal Mode. Press : to switch to Command Mode\t"<<currentDir;
-        moveCursor(1,0);
+        moveCursor(nrows-5,0);
+        cout<<"Total Files and Directories: "<<filess<<endl;
+        cout << "\n--------------Normal Mode-------------- \nPress : to switch to Command Mode\t"<<currentDir;
+        moveCursor(1,1);
 	closedir(dir);
 }
 
 bool sorc(dirent* a ,dirent* b)
 {
-        return ((a->d_name)<(b->d_name));
+        return strcasecmp((a->d_name),(b->d_name))<0;
 }
 
 void SetCurrentDir(const char * dir) {
         DIR * dp;
         struct dirent * entry;
         firstindex=0;
-        lastindex=10;
+        lastindex=max_i;
         dp = opendir(dir);
         if (dp == NULL) {
                 fprintf(stderr, "No Such Directory!\n");
@@ -161,15 +170,29 @@ void SetCurrentDir(const char * dir) {
         cursor = 0;
         sort(files.begin(),files.end(),sorc);
         showCurrentDir(dir);
+        //cout<<files[0]->d_name<<endl;
         //cout<<currentDir;
         return;
+}
+
+void isignal(int signal)
+{
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, & w);
+        nrows=w.ws_row;
+        ncols=w.ws_col;
+        if(nrows<20)
+        max_i=nrows-7;
+        else
+        max_i=10;
+        SetCurrentDir(currentDir);
 }
 
 void Keyboard()
 {
     tcgetattr(0, & ins);
         ns = ins;
-        ns.c_lflag &= ~(ECHO | ICANON);
+        //ns.c_iflag &= ~(ICRNL | IXON);
+        ns.c_lflag &= ~(ECHO | ICANON | ISIG);
         tcsetattr(0, TCSANOW, & ns);
         return;
 }
@@ -209,6 +232,9 @@ void Down() {
         }
         else if (lastindex != files.size() && cursor!=filess) {
          firstindex++;
+         if(nrows<25)
+         lastindex=firstindex+max_i;
+         else
          lastindex++;
          showCurrentDir(currentDir);
                 move;
@@ -310,8 +336,8 @@ bool searchfile(string filename)
 
 void setMode()
 {
-        moveCursor(13, 0);
-        cout << "Mode: Command Mode. Press ESC to switch to Normal Mode\n";
+        moveCursor(nrows-3, 0);
+        cout << "--------------Command Mode-------------- \nPress ESC to switch to Normal Mode\n";
         return;
 }
 
@@ -349,11 +375,12 @@ void copydir(string s1,string s2)
                 stat((s1+"/"+file->d_name).c_str(),&buf);
                 if(S_ISREG(buf.st_mode))
                 {
+                        //cout<<s2+"/"+string(file->d_name)<<endl;
                         copyFile(s1+"/"+string(file->d_name), s2+"/"+string(file->d_name));
                 }
                 else{
                         if(string(file->d_name)!="." && string(file->d_name)!=".."){
-                                mkdir((s1 + "/" + string(file->d_name)).c_str(), S_IRUSR | S_IWUSR | S_IXUSR);
+                                mkdir((s2 + "/" + string(file->d_name)).c_str(), S_IRUSR | S_IWUSR | S_IXUSR);
                                 copydir(s1+ "/" + string(file->d_name), s2 + "/" + string(file->d_name));
                         }
                 }
@@ -366,7 +393,7 @@ char* ExtractPath(string attribute2)
 {
         char* p;
         if(attribute2[0]=='~')
-        p = realpath((attribute2.substr(1)).c_str(),NULL);
+        p = realpath(("/home/dell"+(attribute2.substr(1))).c_str(),NULL);
         else
         p = realpath(attribute2.c_str(),NULL);
         return p;
@@ -440,16 +467,22 @@ int commandMode()
                         if(command=="search")
                         {
                                 searchingdir=currentDir;
+                                SetCurrentDir(currentDir);
+                                setMode();
                                 if(searchfile(attribute1))
-                                cout<<endl<<"True";
+                                cout<<"True";
                                 else
-                                cout<<endl<<"False";
+                                cout<<"False";
                         }
                         else if(command=="create_dir")
                         {
                                 string location,filename;
                                 filename=attribute1;
                                 location=attribute2;
+                                SetCurrentDir(currentDir);
+                                setMode();
+                                if(ExtractPath(attribute2)==NULL)
+                                cout<<"Invalid Path";
                                 mkdir((location + '/' + filename).c_str(), S_IRUSR | S_IWUSR | S_IXUSR);
                                 }
                         else if(command=="create_file")
@@ -457,13 +490,21 @@ int commandMode()
                                 string location,filename;
                                 filename=attribute1;
                                 location=attribute2;
+                                SetCurrentDir(currentDir);
+                                setMode();
+                                if(ExtractPath(attribute2)==NULL)
+                                cout<<"Invalid Path";
                                 open((location + '/' + filename).c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
                         }
                         else if(command=="goto")
                         {
                                 char* p=ExtractPath(attribute1);
                                 if(p==NULL)
-                                cout<<endl<<"Invalid Path";
+                                {
+                                        SetCurrentDir(currentDir);
+                                        setMode();
+                                        cout<<"Invalid Path";
+                                }
                                 else{
                                 SetCurrentDir(p);
                                 setMode();
@@ -495,28 +536,62 @@ int commandMode()
                         }
                         else if(command=="copy")
                         {
+                                int path_error=0;
+                                //cout<<attributes.size();
                                 for(int i=1;i<attributes.size()-1;i++)
                                 {
-                                        cout<<attributes[i]<<endl;
+                                        //cout<<attributes[i]<<endl;
                                         struct stat buf;
                                         stat(attributes[i].c_str(),&buf);
                                         if(S_ISDIR(buf.st_mode))
                                         {
-                                        
+                                                char* location=ExtractPath(attributes[i]);
+                                                //cout<<location;
+                                                string filename="";
+                                                for(int j=attributes[i].size()-1;j>=0;j--)
+                                                {
+                                                        if(attributes[i][j]!='/')
+                                                        filename=attributes[i][j]+filename;
+                                                        else
+                                                        break;
+                                                }
                                                 char* p=ExtractPath(attribute2);
-                                                mkdir((string(p) + "/" + attributes[i]).c_str(), S_IRUSR | S_IWUSR | S_IXUSR);
-                                                copydir(string(currentDir)+ "/" + attributes[i], string(p) + "/" + attributes[i]);
+                                                if(p==NULL || location==NULL)
+                                                        path_error=-1;
+                                                else{
+                                                mkdir((string(p) + "/" + filename).c_str(), S_IRUSR | S_IWUSR | S_IXUSR);
+                                                copydir(location, string(p) + "/" + filename);
+                                                }
                                         }
                                         else 
                                         {
+                                                char* location=ExtractPath(attributes[i]);
+                                                //cout<<location;
+                                                string filename="";
+                                                for(int j=attributes[i].size()-1;j>=0;j--)
+                                                {
+                                                        if(attributes[i][j]!='/')
+                                                        filename=attributes[i][j]+filename;
+                                                        else
+                                                        break;
+                                                }
                                                 char* p=ExtractPath(attribute2);
-                                                copyFile(string(currentDir)+ "/" + attributes[i], string(p) + "/" + attributes[i]);
+                                                if(p==NULL || location==NULL)
+                                                        path_error=-1;
+                                                else{
+                                                copyFile(location, string(p) + "/" + filename);
+                                                }
                                         }
                                 }
+                                SetCurrentDir(currentDir);
+                                setMode();
+                                if(path_error==-1)
+                                cout<<"Invalid Path";
                         }
                         else if(command=="move")
                         {
                                 cout<<attributes.size()<<endl;
+                                int k=0;
                                 for(int j=1;j<attributes.size()-1;j++)
                                 {
                                         string filename="";
@@ -527,10 +602,12 @@ int commandMode()
                                                 else
                                                 break;
                                         }
-                                        rename(attributes[j].c_str(), (attribute2+"/"+filename).c_str());
+                                        k=rename(attributes[j].c_str(), (attribute2+"/"+filename).c_str());
                                 }
                                 SetCurrentDir(currentDir);
                                 setMode();
+                                if(k==-1)
+                                cout<<"Unsuccessful";
                         }
                         else if(command=="quit")
                         return 1;
@@ -544,6 +621,14 @@ int commandMode()
 
 int main() { 
     std::cout << std::fixed;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, & w);
+        nrows=w.ws_row;
+        ncols=w.ws_col;
+        if(nrows<20)
+        max_i=nrows-7;
+        else
+        max_i=10;
+    signal(SIGWINCH, isignal);
     std::cout << std::setprecision(1);
     char dir[1024]="/home/dell";
     int dirsize=1024;
