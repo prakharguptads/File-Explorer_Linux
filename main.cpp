@@ -385,6 +385,7 @@ void copydir(string s1,string s2)
                         }
                 }
         }
+        chdir("..");
         closedir(d);
         return;
 }
